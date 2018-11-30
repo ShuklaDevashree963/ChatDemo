@@ -62,25 +62,94 @@ class ChatViewController: JSQMessagesViewController,UIImagePickerControllerDeleg
         collectionView.collectionViewLayout.incomingAvatarViewSize = CGSize(width: 40, height: 40)
         collectionView.collectionViewLayout.outgoingAvatarViewSize = CGSize(width: 40, height: 40)
         
-//        let query = Constants.refs.databaseChats.queryLimited(toLast: 10)
-//
-//        _ = query.observe(.childAdded, with: { [weak self] snapshot in
-//
-//            if  let data        = snapshot.value as? [String: String],
-//                let id          = data["sender_id"],
-//                let name        = data["name"],
-//                let text        = data["text"],
-//                !text.isEmpty
-//            {
-//                if let message = JSQMessage(senderId: id, displayName: name, text: text)
-//                {
-//                    self?.messages.append(message)
-//                    self?.finishReceivingMessage()
-//                }
-//            }
-//        })
+       
+
+        //.queryOrdered(byChild: "firstname") timestamp
+        Constants.refs.databaseChats.observeSingleEvent(of: .value) {
+            (snapshot) in
+            for _ in snapshot.children.allObjects as! [DataSnapshot] {
+                let value = snapshot.value as? NSDictionary
+                let firstname = value?["name"] as? String ?? ""
+                print(firstname)
+            }
+        }
         
-        self.downloadMessages()
+        
+        
+        let query = Constants.refs.databaseChats.queryLimited(toLast: 10)
+        
+        _ = query.observe(.childAdded, with: { [weak self] snapshot in
+            
+            if let data = snapshot.value as? [String:AnyObject], let id  = data["sender_id"] as? String, let senderName = data["name"] as? String {
+            
+                if let imageUrl = data["imageUrl"] as? String, imageUrl.count > 0 {
+                    var img: UIImage!
+                    let mediaItem = JSQPhotoMediaItem(image: nil)
+                    mediaItem?.appliesMediaViewMaskAsOutgoing = (id == self?.senderId)
+                    mediaItem?.image = nil
+
+                    let ref = Storage.storage().reference(forURL: imageUrl)
+                    let megaByte = Int64(1 * 1024 * 1024)
+
+                    ref.getData(maxSize: megaByte) { data, error in
+                        guard let imageData = data else {
+                            return
+                        }
+                        img = UIImage(data: imageData)
+
+                        if img != nil{
+                            mediaItem?.image = img! as UIImage
+                        }
+
+                    }
+                    
+                    self?.messages.append(JSQMessage(senderId: id, displayName: senderName, media: mediaItem))
+                    
+                } else if let text = data["text"] as? String {
+                    self?.messages.append(JSQMessage(senderId: id, displayName: senderName, text: text))
+                }
+                
+                self?.finishReceivingMessage()
+            }
+            
+//            if let data = snapshot.value as? [String:String], let id  = data["sender_id"] , let senderName = data["name"] , let text = data["text"] {
+//
+//                let msg : JSQMessage?
+//
+//                if let imageUrl = data["imageUrl"] , imageUrl.count > 0 {
+//                    var img: UIImage!
+//                    let mediaItem = JSQPhotoMediaItem(image: nil)
+//                    mediaItem?.appliesMediaViewMaskAsOutgoing = (id == self?.senderId)
+//                    mediaItem?.image = nil
+//
+//                    let ref = Storage.storage().reference(forURL: imageUrl)
+//                    let megaByte = Int64(1 * 1024 * 1024)
+//
+//                    ref.getData(maxSize: megaByte) { data, error in
+//                        guard let imageData = data else {
+//                            return
+//                        }
+//                        img = UIImage(data: imageData)
+//
+//                        if img != nil{
+//                            mediaItem?.image = img! as UIImage
+//                            //self.collectionView!.reloadData()
+//                        }
+//
+//                    }
+//                    //
+//                    msg = JSQMessage(senderId: id, displayName: senderName, media: mediaItem)
+//                } else {
+//                    msg = JSQMessage(senderId: id, displayName: senderName, text: text)
+//                }
+//
+//                self?.messages.append(msg!)
+//                self?.finishReceivingMessage()
+//            }
+            
+        })
+        
+       // self.downloadMessages()
     }
     
     @objc func showDisplayNameDialog()
@@ -122,8 +191,6 @@ class ChatViewController: JSQMessagesViewController,UIImagePickerControllerDeleg
         super.didReceiveMemoryWarning()
         // Dispose of any resources that can be recreated.
     }
-    
-    
     
     override func collectionView(_ collectionView: JSQMessagesCollectionView!, messageDataForItemAt indexPath: IndexPath!) -> JSQMessageData!
     {
@@ -168,7 +235,6 @@ class ChatViewController: JSQMessagesViewController,UIImagePickerControllerDeleg
     {
         return 25
     }
-    
     
     override func didPressSend(_ button: UIButton!, withMessageText text: String!, senderId: String!, senderDisplayName: String!, date: Date!)
     {
@@ -263,50 +329,36 @@ class ChatViewController: JSQMessagesViewController,UIImagePickerControllerDeleg
         let downloadRef = Constants.refs.databaseChats.queryLimited(toLast: 10)
         
         _ = downloadRef.observe(.childAdded, with: { snapshot in
-            
-            if let data = snapshot.value as? [String:AnyObject], let id  = data["sender_id"] as? String, let senderName = data["name"] as? String {
+            if let data = snapshot.value as? [String:AnyObject],
+                let id  = data["sender_id"] as? String,
+                let senderName = data["name"],
+                let imageUrl = data["imageUrl"] as? String {
                 
-                let msg : JSQMessage?
+                var img: UIImage!
+                let mediaItem = JSQPhotoMediaItem(image: nil)
+                mediaItem?.appliesMediaViewMaskAsOutgoing = (id == self.senderId)
+                mediaItem?.image = nil
                 
-                if let imageUrl = data["imageUrl"] as? String, imageUrl.count > 0 {
+                let ref = Storage.storage().reference(forURL: imageUrl)
+                let megaByte = Int64(1 * 1024 * 1024)
+                
+                ref.getData(maxSize: megaByte) { data, error in
+                    guard let imageData = data else {
+                        return
+                    }
+                    img = UIImage(data: imageData)
                     
-                    //
-                    msg = JSQMessage(senderId: id, displayName: senderName, media: <#T##JSQMessageMediaData!#>)
-                } else {
-                    msg = JSQMessage(senderId: id, displayName: <#T##String!#>, text: <#T##String!#>)
+                    if img != nil{
+                        mediaItem?.image = img! as UIImage
+                        //self.collectionView!.reloadData()
+                    }
+                    
+                    let message = JSQMessage(senderId: id, displayName: senderName as! String, media: mediaItem)
+                    self.messages.append(message!)
+                        
+                    self.finishReceivingMessage()
                 }
-                messages.append(msg)
             }
-            
-            
-//            if let data = snapshot.value as? [String:AnyObject],
-//                let id  = data["sender_id"] as? String,
-//                let senderName = data["name"],
-//                let imageUrl = data["imageUrl"] as? String {
-//                let ref = Storage.storage().reference(forURL: imageUrl)
-//                let megaByte = Int64(1 * 1024 * 1024)
-//                var img: UIImage!
-//                let mediaItem = JSQPhotoMediaItem(image: nil)
-//                mediaItem?.appliesMediaViewMaskAsOutgoing = (id == self.senderId)
-//                mediaItem?.image = nil
-//                ref.getData(maxSize: megaByte) { data, error in
-//                    guard let imageData = data else {
-//                        return
-//                    }
-//                    img = UIImage(data: imageData)
-//
-//                    if img != nil{
-//                        mediaItem?.image = img! as UIImage
-//                        //self.collectionView!.reloadData()
-//                    }
-//
-//                    let message = JSQMessage(senderId: id, displayName: senderName as! String, media: mediaItem)
-//
-//                    self.messages.append(message!)
-//
-//                    self.finishReceivingMessage()
-//                }
-//            }
         })
     }
     
